@@ -3,6 +3,7 @@
 import argparse
 import re
 from pathlib import Path
+from uuid import uuid4
 
 from playwright.sync_api import sync_playwright, expect
 
@@ -133,6 +134,31 @@ with sync_playwright() as p:
         print('PASS: real touch drag using Chromium input events')
     else:
         print('SKIP: touch reordering requires at least two employees')
+
+    page.set_viewport_size({'width': 1440, 'height': 1100})
+    page.reload()
+    expect(page.locator('#employee-count')).to_have_text(str(len(baseline)))
+    page.locator('#new-employee-button').click()
+    new_name = f'Browser-Test {uuid4().hex[:8]}'
+    page.locator('#new-employee-name').fill(new_name)
+    with page.expect_request('**/api/new-mitarbeiter') as sent:
+        page.locator('#new-employee-submit').click()
+    assert sent.value.method == 'POST'
+    assert sent.value.post_data_json == {'name': new_name}
+    expect(page.locator('#new-employee-dialog')).to_be_hidden()
+    expect(page.locator('#employee-count')).to_have_text(str(len(baseline) + 1))
+    expect(page.locator('.employee-name').last).to_have_text(new_name)
+    expect(page.locator('#save-button')).to_be_disabled()
+    page.reload()
+    expect(page.locator('.employee-name').last).to_have_text(new_name)
+    page.locator('#new-employee-button').click()
+    page.locator('#new-employee-name').fill(new_name.upper())
+    page.locator('#new-employee-submit').click()
+    expect(page.locator('#new-employee-error')).to_have_text('Dieser Mitarbeiter existiert bereits.')
+    expect(page.locator('#new-employee-dialog')).to_be_visible()
+    expect(page.locator('.employee-row')).to_have_count(len(baseline) + 1)
+    page.locator('#new-employee-cancel').click()
+    print('PASS: create via popup, exact payload, persistence after reload, duplicate rejected')
     assert not errors, errors
     print('PASS: no JavaScript errors')
     browser.close()

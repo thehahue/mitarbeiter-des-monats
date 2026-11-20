@@ -20,6 +20,7 @@ PORT=8081 ./mvnw spring-boot:run
 ## Bedienung
 
 - Die Mitarbeiterliste wird beim Öffnen über `GET /api/mitarbeiter` aus H2 geladen. Die Anzahl der angezeigten Mitarbeiter richtet sich nach der API-Antwort.
+- **Mitarbeiter anlegen** öffnet die Namenseingabe. Neue Mitarbeiter werden gespeichert und am Ende der Rangliste angefügt.
 - Am Griff rechts eine Person mit Maus oder Touch an ihren neuen Platz ziehen. Am Bildschirmrand scrollt die Seite während des Ziehens automatisch.
 - Alternativ die Pfeil-Schaltflächen verwenden. Mit der Tabulatortaste den Griff fokussieren und mit **↑ / ↓** verschieben; **Pos1 / Ende** verschiebt an den Anfang bzw. das Ende. **Escape** bricht einen laufenden Ziehvorgang ab.
 - Der erste Platz wird rechts hervorgehoben. Änderungen erscheinen zunächst als Vorschau.
@@ -28,7 +29,7 @@ PORT=8081 ./mvnw spring-boot:run
 
 ## API
 
-GET und POST verwenden dasselbe Format, ohne interne Datenbank-IDs. **Ranking 0 entspricht Platz 1**; für eine Liste mit `n` Mitarbeitern reichen die Rankings von `0` bis `n - 1`. GET und die POST-Antwort sind nach Ranking aufsteigend sortiert.
+`GET /api/mitarbeiter` und `POST /api/save-mitarbeiter` verwenden dasselbe Listenformat, ohne interne Datenbank-IDs. **Ranking 0 entspricht Platz 1**; für eine Liste mit `n` Mitarbeitern reichen die Rankings von `0` bis `n - 1`. Alle Endpunkte geben die vollständige Liste nach Ranking aufsteigend sortiert zurück.
 
 Beispiel mit einer beliebigen Teamgröße:
 
@@ -51,24 +52,28 @@ curl -X POST http://localhost:8080/api/save-mitarbeiter \
   --data-binary @rangliste.json
 ```
 
-POST ersetzt die vollständige Liste atomar in einer Transaktion. Für dynamische Ranglisten benötigt jeder Eintrag einen eindeutigen, nicht leeren Namen (maximal 80 Zeichen) und ein eindeutiges ganzzahliges Ranking. Die Rankings müssen lückenlos von `0` bis `n - 1` reichen. Eine leere Liste wird als `{"mitarbeiter":[]}` dargestellt. Ungültige Anfragen liefern HTTP 400 und verändern die gespeicherten Daten nicht.
+`POST /api/save-mitarbeiter` ersetzt die vollständige Liste atomar in einer Transaktion. Jeder Eintrag benötigt einen eindeutigen, nicht leeren Namen (maximal 80 Zeichen) und ein eindeutiges ganzzahliges Ranking. Die Rankings müssen lückenlos von `0` bis `n - 1` reichen. Eine leere Liste lässt sich mit `{"mitarbeiter":[]}` speichern. Ungültige Anfragen liefern HTTP 400 und verändern die gespeicherten Daten nicht.
 
-### Mitarbeiter anlegen (Frontend)
+### Mitarbeiter anlegen
 
-Über **Mitarbeiter anlegen** öffnet sich ein Dialog zur Namenseingabe. Er sendet `POST /api/new-mitarbeiter` mit beispielsweise `{"name":"Max Meier"}` und erwartet als Antwort die vollständige aktualisierte Liste im oben gezeigten Format. Diese Antwort wird als gespeicherter Stand übernommen. Bei einer ungespeicherten Reihenfolge weist der Dialog darauf hin, dass sie dabei ersetzt wird. Fehler bleiben im Dialog sichtbar; Name und bisherige Rangliste bleiben erhalten.
+`POST /api/new-mitarbeiter` nimmt beispielsweise `{"name":"Max Meier"}` entgegen, entfernt äußere Leerzeichen und fügt den Mitarbeiter am Ende der Rangliste hinzu. Das Ranking wird vom Backend vergeben. Die Antwort mit HTTP 200 enthält die vollständige aktualisierte Liste im oben gezeigten Format. Leere, fehlende, zu lange oder doppelte Namen liefern HTTP 400; bei der Prüfung auf doppelte Namen wird Groß-/Kleinschreibung ignoriert.
 
-Das Frontend unterstützt eine dynamische Mitarbeiterzahl einschließlich einer leeren Liste. **Der neue Endpunkt und die Backend-Validierung für dynamische Ranglisten sind noch umzusetzen.**
+```bash
+curl -X POST 'http://localhost:8080/api/new-mitarbeiter' -H 'Content-Type: application/json' -d '{"name":"Max Meier"}'
+```
+
+Der Frontend-Dialog **Mitarbeiter anlegen** verwendet diesen Endpunkt und übernimmt die Antwort als gespeicherten Stand. Bei einer ungespeicherten Reihenfolge weist der Dialog darauf hin, dass sie dabei ersetzt wird. Fehler bleiben im Dialog sichtbar; Name und bisherige Rangliste bleiben erhalten. Frontend und Backend unterstützen eine dynamische Mitarbeiterzahl einschließlich einer leeren Liste.
 
 ## Datenbank und Aufbau
 
-Die H2-Datei liegt unter `data/mitarbeiter.mv.db`, relativ zum Arbeitsverzeichnis beim Start. Beim ersten Start werden Beispieldaten angelegt. Diese legen keine feste Teamgröße für das Frontend fest. Eine vorhandene Rangliste wird bei einem Neustart beibehalten. Für einen frischen Beispielstand die Anwendung stoppen und das Verzeichnis `data/` löschen.
+Die H2-Datei liegt unter `data/mitarbeiter.mv.db`, relativ zum Arbeitsverzeichnis beim Start. Beim ersten Start werden Beispieldaten angelegt. Diese legen keine feste Teamgröße fest. Eine vorhandene Rangliste wird bei einem Neustart beibehalten, auch wenn sie leer gespeichert wurde. Der Initialisierungsstatus liegt in `MITARBEITER_STATUS`; die Tabelle wird auch in bestehenden Datenbanken automatisch ergänzt. Dieselbe Statuszeile serialisiert schreibende Transaktionen, damit parallele Neuanlagen unterschiedliche Rankings erhalten. Für einen frischen Beispielstand die Anwendung stoppen und das Verzeichnis `data/` löschen.
 
 ```text
 src/main/java/at/bbrz/mitarbeiter/
   controller/     REST-Endpunkte und Validierungsfehler
-  entity/         H2-Datenmodell mit Lombok
   model/          JSON-Modelle mit Lombok und Bean Validation
   repo/           Spring-Data-JDBC-Repository
+    entity/       H2-Datenmodell mit Lombok
   service/        Ranking, Transaktionen und Beispieldaten
 src/main/resources/
   application.properties
@@ -86,7 +91,7 @@ Die Oberfläche verwendet Google Fonts mit lokalen Systemschriften als Fallback.
 java -jar target/mitarbeiter-des-monats-0.0.1-SNAPSHOT.jar
 ```
 
-Die API-Integrationstests verwenden eine getrennte H2-In-Memory-Datenbank und prüfen Beispieldaten, Sortierung, Speichern und erneutes Laden sowie die unveränderte Datenbank bei ungültigen Anfragen.
+Die API-Integrationstests verwenden eine getrennte H2-In-Memory-Datenbank und prüfen unterschiedliche Teamgrößen einschließlich leerer Listen, Sortierung, Anlegen und erneutes Laden, Namens- und Rankingvalidierung, parallele Neuanlagen sowie die unveränderte Datenbank bei ungültigen Anfragen.
 
 ## Browser-Test
 
@@ -98,7 +103,7 @@ python3 scripts/frontend-check.py --chromium-executable /usr/bin/chromium
 
 Der Test benötigt Playwright (Installation siehe unten) und prüft unterschiedliche Teamgrößen, Anlegen, Fehlerfälle, Tastaturbedienung und mobile Ansichten. Ohne `--chromium-executable` verwendet er den von Playwright installierten Browser.
 
-Das dauerhafte Testskript liegt unter `scripts/browser-check.py` und bleibt bei `./mvnw clean` erhalten. Es prüft Laden, Tastaturbedienung, Drag-and-drop mit Maus und Touch, Speichern, Fehlerbehandlung und responsive Ansichten. Es testet die vom Server ausgelieferten Dateien und verändert die Rangliste der Testinstanz.
+Das dauerhafte Testskript liegt unter `scripts/browser-check.py` und bleibt bei `./mvnw clean` erhalten. Es prüft Laden, Tastaturbedienung, Drag-and-drop mit Maus und Touch, Speichern, Anlegen über das Popup einschließlich Duplikatprüfung, Fehlerbehandlung und responsive Ansichten. Es testet die vom Server ausgelieferten Dateien und verändert die Rangliste der Testinstanz.
 
 Einmalig Playwright und Chromium in einer Python-Umgebung installieren:
 

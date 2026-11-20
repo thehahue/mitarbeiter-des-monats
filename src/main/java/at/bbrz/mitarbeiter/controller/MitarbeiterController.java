@@ -1,6 +1,7 @@
 package at.bbrz.mitarbeiter.controller;
 
 import at.bbrz.mitarbeiter.model.MitarbeiterResponse;
+import at.bbrz.mitarbeiter.model.NewMitarbeiterRequest;
 import at.bbrz.mitarbeiter.service.MitarbeiterService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -26,5 +27,10 @@ public class MitarbeiterController {
     @PostMapping("/save-mitarbeiter")
     public MitarbeiterResponse saveMitarbeiter(@Valid @RequestBody MitarbeiterResponse request) {
         return service.saveMitarbeiter(request);
+    }
+
+    @PostMapping("/new-mitarbeiter")
+    public MitarbeiterResponse newMitarbeiter(@Valid @RequestBody NewMitarbeiterRequest request) {
+        return service.newMitarbeiter(request);
     }
 }

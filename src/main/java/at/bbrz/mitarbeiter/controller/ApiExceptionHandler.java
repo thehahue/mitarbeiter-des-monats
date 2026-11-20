@@ -22,6 +22,6 @@ public class ApiExceptionHandler {
     @ExceptionHandler(HttpMessageNotReadableException.class)
     ProblemDetail invalidJson() {
         return ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST,
-                "Bitte ein gültiges JSON mit Mitarbeiterliste, Namen und ganzzahligen Rankings senden.");
+                "Bitte ein gültiges JSON im Format des Endpunkts senden: einen Namen zum Anlegen oder eine Mitarbeiterliste mit Namen und ganzzahligen Rankings zum Speichern.");
     }
 }

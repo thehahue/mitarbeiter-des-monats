@@ -1,6 +1,5 @@
 package at.bbrz.mitarbeiter.model;
 
-import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -18,7 +17,6 @@ public class MitarbeiterEntry {
     private String name;
 
     @NotNull(message = "Jeder Mitarbeiter braucht ein Ranking.")
-    @Min(value = 0, message = "Rankings müssen zwischen 0 und 9 liegen.")
-    @Max(value = 9, message = "Rankings müssen zwischen 0 und 9 liegen.")
+    @Min(value = 0, message = "Rankings dürfen nicht negativ sein.")
     private Integer ranking;
 }

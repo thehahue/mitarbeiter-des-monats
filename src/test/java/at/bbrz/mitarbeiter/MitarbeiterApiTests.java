@@ -3,10 +3,15 @@ package at.bbrz.mitarbeiter;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+import java.util.stream.IntStream;
 
 import at.bbrz.mitarbeiter.model.MitarbeiterEntry;
 import at.bbrz.mitarbeiter.model.MitarbeiterResponse;
 import at.bbrz.mitarbeiter.repo.MitarbeiterRepository;
+import at.bbrz.mitarbeiter.repo.entity.MitarbeiterEntity;
 import at.bbrz.mitarbeiter.service.MitarbeiterService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -15,6 +20,7 @@ import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.web.context.WebApplicationContext;
@@ -36,6 +42,8 @@ class MitarbeiterApiTests {
     MitarbeiterRepository repository;
     @Autowired
     MitarbeiterService service;
+    @Autowired
+    JdbcTemplate jdbc;
 
     MockMvc mvc;
     final JsonMapper json = JsonMapper.builder().build();
@@ -44,19 +52,21 @@ class MitarbeiterApiTests {
     void setUp() {
         mvc = MockMvcBuilders.webAppContextSetup(context).build();
         repository.deleteAll();
+        jdbc.update("UPDATE MITARBEITER_STATUS SET INITIALIZED = FALSE WHERE ID = 1");
         service.initializeExamples();
     }
 
     @Test
-    void loadsTenExamplesFromDatabaseInRankingOrder() throws Exception {
+    void loadsExamplesFromDatabaseInRankingOrder() throws Exception {
+        int count = Math.toIntExact(repository.count());
         mvc.perform(get("/api/mitarbeiter"))
                 .andExpect(status().isOk())
                 .andExpect(header().string("Cache-Control", "no-store"))
-                .andExpect(jsonPath("$.mitarbeiter.length()").value(10))
+                .andExpect(jsonPath("$.mitarbeiter.length()").value(count))
                 .andExpect(jsonPath("$.mitarbeiter[0].name").value("Franz Huber"))
                 .andExpect(jsonPath("$.mitarbeiter[0].ranking").value(0))
-                .andExpect(jsonPath("$.mitarbeiter[9].name").value("Elena Mayer"))
-                .andExpect(jsonPath("$.mitarbeiter[9].ranking").value(9))
+                .andExpect(jsonPath("$.mitarbeiter[" + (count - 1) + "].name").value("Elena Mayer"))
+                .andExpect(jsonPath("$.mitarbeiter[" + (count - 1) + "].ranking").value(count - 1))
                 .andExpect(jsonPath("$.mitarbeiter[0].id").doesNotExist());
     }
 
@@ -73,7 +83,7 @@ class MitarbeiterApiTests {
                 .andExpect(status().isOk()).andExpect(content().json(expected));
         mvc.perform(get("/api/mitarbeiter"))
                 .andExpect(status().isOk()).andExpect(content().json(expected));
-        assertThat(repository.findAllByOrderByRankingAsc()).hasSize(10)
+        assertThat(repository.findAllByOrderByRankingAsc()).hasSize(entries.size())
                 .first().satisfies(row -> {
                     assertThat(row.getName()).isEqualTo("Elena Mayer");
                     assertThat(row.getRanking()).isZero();
@@ -85,20 +95,20 @@ class MitarbeiterApiTests {
     @Test
     void rejectsDuplicateRankingsWithoutChangingDatabase() throws Exception {
         List<MitarbeiterEntry> entries = reversedRanking();
-        entries.get(9).setRanking(0);
+        entries.getLast().setRanking(0);
         rejectsWithoutChanges(json.writeValueAsString(new MitarbeiterResponse(entries)));
     }
 
     @Test
     void rejectsDuplicateNamesRegardlessOfCaseAndSpaces() throws Exception {
         List<MitarbeiterEntry> entries = reversedRanking();
-        entries.get(9).setName("  ELENA MAYER  ");
+        entries.getLast().setName("  ELENA MAYER  ");
         rejectsWithoutChanges(json.writeValueAsString(new MitarbeiterResponse(entries)));
     }
 
     @ParameterizedTest
     @ValueSource(strings = {
-            "null", "{}", "{\"mitarbeiter\":null}", "{\"mitarbeiter\":[]}",
+            "null", "{}", "{\"mitarbeiter\":null}",
             "{\"mitarbeiter\":[null]}", "{\"mitarbeiter\":\"falsch\"}", "{kaputt"
     })
     void rejectsMalformedOrIncompleteRequests(String body) throws Exception {
@@ -112,7 +122,7 @@ class MitarbeiterApiTests {
             "{\"ranking\":0}", "{\"name\":\"Franz Huber\"}",
             "{\"name\":\"Franz Huber\",\"ranking\":null}",
             "{\"name\":\"Franz Huber\",\"ranking\":-1}",
-            "{\"name\":\"Franz Huber\",\"ranking\":10}",
+            "{\"name\":\"Franz Huber\",\"ranking\":2147483647}",
             "{\"name\":\"Franz Huber\",\"ranking\":0.5}",
             "{\"name\":\"Franz Huber\",\"ranking\":\"falsch\"}", "null"
     })
@@ -121,6 +131,136 @@ class MitarbeiterApiTests {
         int firstEntryStart = valid.indexOf('{', 1);
         int firstEntryEnd = valid.indexOf('}', firstEntryStart) + 1;
         rejectsWithoutChanges(valid.substring(0, firstEntryStart) + entry + valid.substring(firstEntryEnd));
+    }
+
+    @ParameterizedTest
+    @ValueSource(ints = {0, 1, 3, 12, 37})
+    void savesAndLoadsDynamicTeamSizes(int count) throws Exception {
+        List<MitarbeiterEntry> entries = sampleEntries(count);
+        String expected = json.writeValueAsString(new MitarbeiterResponse(entries));
+        List<MitarbeiterEntry> shuffled = new ArrayList<>(entries);
+        Collections.reverse(shuffled);
+        mvc.perform(post("/api/save-mitarbeiter")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json.writeValueAsString(new MitarbeiterResponse(shuffled))))
+                .andExpect(status().isOk()).andExpect(content().json(expected));
+        mvc.perform(get("/api/mitarbeiter"))
+                .andExpect(status().isOk()).andExpect(content().json(expected));
+        assertThat(repository.count()).isEqualTo(count);
+        service.initializeExamples();
+        assertThat(service.getMitarbeiter()).isEqualTo(new MitarbeiterResponse(entries));
+    }
+
+    @Test
+    void rejectsRankingsWithGapsOrWithoutZeroWithoutChangingDatabase() throws Exception {
+        for (int count : List.of(1, 3, 12)) {
+            List<MitarbeiterEntry> entries = sampleEntries(count);
+            entries.getLast().setRanking(count);
+            rejectsWithoutChanges(json.writeValueAsString(new MitarbeiterResponse(entries)));
+            entries = sampleEntries(count);
+            entries.forEach(entry -> entry.setRanking(entry.getRanking() + 1));
+            rejectsWithoutChanges(json.writeValueAsString(new MitarbeiterResponse(entries)));
+        }
+    }
+
+    @ParameterizedTest
+    @ValueSource(ints = {0, 1, 12})
+    void appendsNewEmployeeAndReturnsEntirePersistedList(int count) throws Exception {
+        List<MitarbeiterEntry> entries = sampleEntries(count);
+        service.saveMitarbeiter(new MitarbeiterResponse(entries));
+        entries.add(new MitarbeiterEntry("Max Meier", count));
+        String expected = json.writeValueAsString(new MitarbeiterResponse(entries));
+
+        mvc.perform(post("/api/new-mitarbeiter")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\":\"  Max Meier  \"}"))
+                .andExpect(status().isOk())
+                .andExpect(content().json(expected))
+                .andExpect(jsonPath("$.mitarbeiter[0].id").doesNotExist());
+        mvc.perform(get("/api/mitarbeiter"))
+                .andExpect(status().isOk()).andExpect(content().json(expected));
+        assertThat(repository.count()).isEqualTo(count + 1);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {
+            "null", "{}", "{kaputt", "[]", "{\"name\":null}", "{\"name\":\"\"}",
+            "{\"name\":\"   \"}", "{\"name\":\"Franz Huber\"}",
+            "{\"name\":\"  FRANZ HUBER  \"}"
+    })
+    void rejectsInvalidOrDuplicateNewEmployeesWithoutChangingDatabase(String body) throws Exception {
+        MitarbeiterResponse before = service.getMitarbeiter();
+        mvc.perform(post("/api/new-mitarbeiter").contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.detail").isNotEmpty());
+        assertThat(service.getMitarbeiter()).isEqualTo(before);
+    }
+
+    @Test
+    void validatesMaximumNameLengthForBothEndpoints() throws Exception {
+        String tooLong = "A".repeat(81);
+        MitarbeiterResponse before = service.getMitarbeiter();
+        mvc.perform(post("/api/new-mitarbeiter").contentType(MediaType.APPLICATION_JSON)
+                        .content(json.writeValueAsString(Collections.singletonMap("name", tooLong))))
+                .andExpect(status().isBadRequest());
+        assertThat(service.getMitarbeiter()).isEqualTo(before);
+        List<MitarbeiterEntry> entries = sampleEntries(1);
+        entries.getFirst().setName(tooLong);
+        rejectsWithoutChanges(json.writeValueAsString(new MitarbeiterResponse(entries)));
+
+        String longestName = "A".repeat(80);
+        mvc.perform(post("/api/new-mitarbeiter").contentType(MediaType.APPLICATION_JSON)
+                        .content(json.writeValueAsString(Collections.singletonMap("name", longestName))))
+                .andExpect(status().isOk());
+        assertThat(repository.findAllByOrderByRankingAsc().getLast().getName()).isEqualTo(longestName);
+    }
+
+    @Test
+    void keepsExistingDataWhenInitializingAnExistingDatabase() {
+        MitarbeiterResponse before = service.getMitarbeiter();
+        jdbc.update("UPDATE MITARBEITER_STATUS SET INITIALIZED = FALSE WHERE ID = 1");
+        service.initializeExamples();
+        assertThat(service.getMitarbeiter()).isEqualTo(before);
+        assertThat(jdbc.queryForObject("SELECT INITIALIZED FROM MITARBEITER_STATUS WHERE ID = 1", Boolean.class))
+                .isTrue();
+    }
+
+    @Test
+    void concurrentNewEmployeesReceiveDifferentRankingsInAnEmptyList() throws Exception {
+        service.saveMitarbeiter(new MitarbeiterResponse(List.of()));
+        CountDownLatch ready = new CountDownLatch(2);
+        CountDownLatch start = new CountDownLatch(1);
+        try (var executor = Executors.newFixedThreadPool(2)) {
+            var first = executor.submit(() -> createAfterSignal("Max Meier", ready, start));
+            var second = executor.submit(() -> createAfterSignal("Anna Neu", ready, start));
+            try {
+                assertThat(ready.await(5, TimeUnit.SECONDS)).isTrue();
+            } finally {
+                start.countDown();
+            }
+            assertThat(first.get(10, TimeUnit.SECONDS)).isEqualTo(200);
+            assertThat(second.get(10, TimeUnit.SECONDS)).isEqualTo(200);
+        }
+        List<MitarbeiterEntity> stored = repository.findAllByOrderByRankingAsc();
+        assertThat(stored).extracting(MitarbeiterEntity::getName)
+                .containsExactlyInAnyOrder("Max Meier", "Anna Neu");
+        assertThat(stored).extracting(MitarbeiterEntity::getRanking).containsExactly(0, 1);
+    }
+
+    private int createAfterSignal(String name, CountDownLatch ready, CountDownLatch start) throws Exception {
+        ready.countDown();
+        if (!start.await(5, TimeUnit.SECONDS)) {
+            throw new IllegalStateException("Startsignal für die parallele Anfrage fehlt.");
+        }
+        return mvc.perform(post("/api/new-mitarbeiter").contentType(MediaType.APPLICATION_JSON)
+                        .content(json.writeValueAsString(Collections.singletonMap("name", name))))
+                .andReturn().getResponse().getStatus();
+    }
+
+    private List<MitarbeiterEntry> sampleEntries(int count) {
+        return IntStream.range(0, count)
+                .mapToObj(index -> new MitarbeiterEntry("Person " + (index + 1), index))
+                .collect(java.util.stream.Collectors.toCollection(ArrayList::new));
     }
 
     private List<MitarbeiterEntry> reversedRanking() {
