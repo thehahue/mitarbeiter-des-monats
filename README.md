@@ -66,6 +66,8 @@ Der Frontend-Dialog **Mitarbeiter anlegen** verwendet diesen Endpunkt und übern
 
 ## Datenbank und Aufbau
 
+Die H2-Konsole ist unter **http://localhost:8080/h2-console** erreichbar (bei anderem Server-Port entsprechend anpassen). Zum Anmelden die JDBC-URL `jdbc:h2:file:./data/mitarbeiter`, den Benutzernamen `sa` und ein leeres Passwort verwenden.
+
 Die H2-Datei liegt unter `data/mitarbeiter.mv.db`, relativ zum Arbeitsverzeichnis beim Start. Beim ersten Start werden Beispieldaten angelegt. Diese legen keine feste Teamgröße fest. Eine vorhandene Rangliste wird bei einem Neustart beibehalten, auch wenn sie leer gespeichert wurde. Der Initialisierungsstatus liegt in `MITARBEITER_STATUS`; die Tabelle wird auch in bestehenden Datenbanken automatisch ergänzt. Dieselbe Statuszeile serialisiert schreibende Transaktionen, damit parallele Neuanlagen unterschiedliche Rankings erhalten. Für einen frischen Beispielstand die Anwendung stoppen und das Verzeichnis `data/` löschen.
 
 ```text
@@ -76,7 +78,7 @@ src/main/java/at/bbrz/mitarbeiter/
     entity/       H2-Datenmodell mit Lombok
   service/        Ranking, Transaktionen und Beispieldaten
 src/main/resources/
-  application.properties
+  application.yml
   schema.sql
   static/         HTML, CSS, JavaScript und SVG-Favicon
 ```
