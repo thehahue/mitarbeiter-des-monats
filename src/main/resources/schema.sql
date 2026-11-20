@@ -11,3 +11,22 @@ CREATE TABLE IF NOT EXISTS MITARBEITER_STATUS (
 );
 INSERT INTO MITARBEITER_STATUS (ID, INITIALIZED)
 SELECT 1, FALSE WHERE NOT EXISTS (SELECT 1 FROM MITARBEITER_STATUS WHERE ID = 1);
+
+-- Beispieldaten nur vor der erstmaligen Initialisierung einer leeren Datenbank.
+-- Bestehende Ranglisten und bewusst leer gespeicherte Listen bleiben erhalten.
+INSERT INTO MITARBEITER (NAME, RANKING)
+SELECT BEISPIELE.NAME, BEISPIELE.RANKING
+FROM (VALUES
+    ('Franz Huber', 0),
+    ('Anna Berger', 1),
+    ('Lukas Steiner', 2),
+    ('Sophie Wagner', 3),
+    ('Thomas Gruber', 4),
+    ('Julia Hofer', 5),
+    ('Michael Bauer', 6),
+    ('Sarah Leitner', 7),
+    ('David Fischer', 8),
+    ('Elena Mayer', 9)
+) AS BEISPIELE(NAME, RANKING)
+WHERE EXISTS (SELECT 1 FROM MITARBEITER_STATUS WHERE ID = 1 AND INITIALIZED = FALSE)
+  AND NOT EXISTS (SELECT 1 FROM MITARBEITER);

@@ -19,8 +19,10 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.core.io.ClassPathResource;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.datasource.init.ResourceDatabasePopulator;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.web.context.WebApplicationContext;
@@ -223,6 +225,46 @@ class MitarbeiterApiTests {
         assertThat(service.getMitarbeiter()).isEqualTo(before);
         assertThat(jdbc.queryForObject("SELECT INITIALIZED FROM MITARBEITER_STATUS WHERE ID = 1", Boolean.class))
                 .isTrue();
+    }
+
+    @Test
+    void schemaSeedsExamplesOnceInAnUninitializedEmptyDatabase() {
+        repository.deleteAll();
+        jdbc.update("UPDATE MITARBEITER_STATUS SET INITIALIZED = FALSE WHERE ID = 1");
+        runSchema();
+        List<MitarbeiterEntity> seeded = repository.findAllByOrderByRankingAsc();
+        assertThat(seeded).extracting(MitarbeiterEntity::getName).containsExactly(
+                "Franz Huber", "Anna Berger", "Lukas Steiner", "Sophie Wagner", "Thomas Gruber",
+                "Julia Hofer", "Michael Bauer", "Sarah Leitner", "David Fischer", "Elena Mayer");
+        assertThat(seeded).extracting(MitarbeiterEntity::getRanking)
+                .containsExactly(0, 1, 2, 3, 4, 5, 6, 7, 8, 9);
+        // Auch ein wiederholter SQL-Lauf vor dem ApplicationRunner dupliziert nichts.
+        runSchema();
+        service.initializeExamples();
+        runSchema();
+        assertThat(repository.findAllByOrderByRankingAsc()).isEqualTo(seeded);
+    }
+
+    @Test
+    void schemaKeepsExistingEmployeesInAnUninitializedDatabase() {
+        service.saveMitarbeiter(new MitarbeiterResponse(sampleEntries(3)));
+        List<MitarbeiterEntity> before = repository.findAllByOrderByRankingAsc();
+        jdbc.update("UPDATE MITARBEITER_STATUS SET INITIALIZED = FALSE WHERE ID = 1");
+        runSchema();
+        service.initializeExamples();
+        assertThat(repository.findAllByOrderByRankingAsc()).isEqualTo(before);
+    }
+
+    @Test
+    void schemaDoesNotRefillAnIntentionallyEmptyList() {
+        service.saveMitarbeiter(new MitarbeiterResponse(List.of()));
+        runSchema();
+        service.initializeExamples();
+        assertThat(repository.count()).isZero();
+    }
+
+    private void runSchema() {
+        new ResourceDatabasePopulator(new ClassPathResource("schema.sql")).execute(jdbc.getDataSource());
     }
 
     @Test
