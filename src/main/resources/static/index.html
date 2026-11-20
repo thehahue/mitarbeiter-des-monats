@@ -1,0 +1,367 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#f7f4ed" />
+    <meta
+      name="description"
+      content="Gute Arbeit sichtbar machen. Die gemeinsame Rangliste für unsere Mitarbeiter des Monats."
+    />
+    <title>Mitarbeiter des Monats · Teamglanz</title>
+    <link rel="icon" href="favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="styles.css" />
+    <script src="app.js" defer></script>
+  </head>
+  <body>
+    <svg
+      class="icon-library"
+      xmlns="http://www.w3.org/2000/svg"
+      aria-hidden="true"
+    >
+      <symbol id="i-spark" viewBox="0 0 24 24">
+        <path d="m12 2 2.6 7.4L22 12l-7.4 2.6L12 22l-2.6-7.4L2 12l7.4-2.6Z" />
+      </symbol>
+      <symbol id="i-arrow" viewBox="0 0 24 24">
+        <path d="M5 12h14m-5-5 5 5-5 5" />
+      </symbol>
+      <symbol id="i-check" viewBox="0 0 24 24">
+        <path d="m5 12 4 4L19 6" />
+      </symbol>
+      <symbol id="i-up" viewBox="0 0 24 24"><path d="m6 14 6-6 6 6" /></symbol>
+      <symbol id="i-down" viewBox="0 0 24 24">
+        <path d="m6 10 6 6 6-6" />
+      </symbol>
+      <symbol id="i-grip" viewBox="0 0 24 24">
+        <path
+          d="M9 5h.01M15 5h.01M9 12h.01M15 12h.01M9 19h.01M15 19h.01"
+          stroke-width="3.5"
+          stroke-linecap="round"
+        />
+      </symbol>
+      <symbol id="i-save" viewBox="0 0 24 24">
+        <path
+          d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h12l4 4v12a2 2 0 0 1-2 2Z"
+        />
+        <path d="M7 3v6h10V3M7 21v-8h10v8" />
+      </symbol>
+    </svg>
+
+    <header class="site-header">
+      <a class="brand" href="./" aria-label="Teamglanz Startseite">
+        <span class="brand-mark"
+          ><svg><use href="#i-spark" /></svg
+        ></span>
+        teamglanz<span class="brand-dot">.</span>
+      </a>
+      <span class="header-label">Kleine Anerkennung. Große Wirkung.</span>
+      <span class="team-label"
+        ><span class="team-icon" aria-hidden="true">T</span> Unser Team</span
+      >
+    </header>
+
+    <main class="page-shell">
+      <section class="intro" aria-labelledby="page-title">
+        <div>
+          <p class="eyebrow">
+            <span class="tiny-star" aria-hidden="true">✦</span> ZEIT FÜR
+            WERTSCHÄTZUNG
+          </p>
+          <h1 id="page-title">
+            Großartige Menschen.<br /><span>Verdienter Applaus.</span>
+          </h1>
+          <p class="intro-copy">
+            Jeden Tag ein bisschen mehr geben. Gemeinsam etwas bewegen.<br
+              class="desktop-break"
+            />
+            Hier machen wir die Leistung unseres Teams sichtbar.
+          </p>
+        </div>
+        <div class="edition">
+          <span class="edition-line"></span><span>UNSER TEAM IM FOKUS</span
+          ><strong id="current-month">Dieser Monat</strong>
+        </div>
+      </section>
+
+      <div class="workspace">
+        <section
+          class="ranking-panel"
+          aria-labelledby="ranking-title"
+          aria-busy="true"
+          id="ranking-panel"
+        >
+          <div class="panel-heading">
+            <div>
+              <p class="eyebrow">MITARBEITER DES MONATS</p>
+              <h2 id="ranking-title">
+                Die Rangliste <span class="count" id="employee-count">—</span>
+              </h2>
+            </div>
+            <span class="connection" id="connection"
+              ><span></span> Wird geladen</span
+            >
+          </div>
+          <div class="team-toolbar">
+            <button
+              class="button button-secondary"
+              id="new-employee-button"
+              type="button"
+              aria-haspopup="dialog"
+              disabled
+            >
+              <span aria-hidden="true">+</span> Mitarbeiter anlegen
+            </button>
+          </div>
+          <div class="list-instruction" id="sort-help">
+            <svg class="icon"><use href="#i-grip" /></svg
+            ><span>Am Griff ziehen, um die Reihenfolge zu ändern.</span
+            ><span class="keyboard-hint">Auch per ↑ ↓</span>
+          </div>
+
+          <div class="loading-state" id="loading-state" role="status">
+            <span class="spinner"></span> Das Team wird geladen …
+          </div>
+          <div class="error-state" id="load-error" hidden>
+            <strong>Die Rangliste ist gerade nicht erreichbar.</strong>
+            <p id="load-error-detail">Bitte versuche es noch einmal.</p>
+            <button
+              class="button button-secondary"
+              id="retry-button"
+              type="button"
+            >
+              Erneut versuchen <svg class="icon"><use href="#i-arrow" /></svg>
+            </button>
+          </div>
+          <div class="empty-state" id="empty-state" hidden>
+            <strong>Hier ist Platz für dein Team.</strong>
+            <p>Lege den ersten Mitarbeiter über „Mitarbeiter anlegen“ an.</p>
+          </div>
+          <ol
+            class="employee-list"
+            id="employee-list"
+            aria-label="Mitarbeiter nach Platzierung"
+            aria-describedby="sort-help"
+          ></ol>
+
+          <div class="save-bar">
+            <div class="save-status">
+              <span class="status-symbol" id="status-symbol"
+                ><svg class="icon"><use href="#i-check" /></svg
+              ></span>
+              <div>
+                <strong id="save-status">Rangliste wird geladen</strong
+                ><span id="save-description">Einen kleinen Moment bitte.</span>
+              </div>
+            </div>
+            <div class="save-actions">
+              <button
+                class="reset-button"
+                id="reset-button"
+                type="button"
+                disabled
+              >
+                Verwerfen</button
+              ><button
+                class="button button-primary"
+                id="save-button"
+                type="button"
+                disabled
+              >
+                <svg class="icon"><use href="#i-save" /></svg
+                ><span>Speichern</span>
+              </button>
+            </div>
+          </div>
+        </section>
+
+        <aside class="sidebar">
+          <section class="spotlight" aria-labelledby="spotlight-title">
+            <div class="spotlight-eyebrow">
+              <svg class="icon"><use href="#i-spark" /></svg> EIN PLATZ IM
+              RAMPENLICHT
+            </div>
+            <div class="trophy-scene" aria-hidden="true">
+              <svg viewBox="0 0 300 230" class="trophy">
+                <defs>
+                  <linearGradient id="cup" x1="0" x2="1">
+                    <stop stop-color="#d99835" />
+                    <stop offset=".48" stop-color="#f2c46a" />
+                    <stop offset="1" stop-color="#dfa745" />
+                  </linearGradient>
+                  <linearGradient id="base" x2="0" y2="1">
+                    <stop stop-color="#9b5235" />
+                    <stop offset="1" stop-color="#713e2c" />
+                  </linearGradient>
+                </defs>
+                <circle cx="150" cy="109" r="90" fill="#f4e5c5" />
+                <circle
+                  cx="150"
+                  cy="109"
+                  r="72"
+                  fill="none"
+                  stroke="#e9d5ae"
+                  stroke-dasharray="3 7"
+                />
+                <ellipse cx="150" cy="206" rx="68" ry="9" fill="#e7d8b7" />
+                <path
+                  d="M108 64H81v24c0 25 17 39 43 39M192 64h27v24c0 25-17 39-43 39"
+                  fill="none"
+                  stroke="#c58b32"
+                  stroke-width="11"
+                />
+                <path
+                  d="M109 64H84v21c0 22 15 35 37 35M191 64h25v21c0 22-15 35-37 35"
+                  fill="none"
+                  stroke="#efc46e"
+                  stroke-width="6"
+                />
+                <path
+                  d="M101 48h98v39c0 33-17 55-49 61-32-6-49-28-49-61Z"
+                  fill="url(#cup)"
+                />
+                <path
+                  d="M111 57v27c0 21 7 36 19 45"
+                  fill="none"
+                  stroke="#ffe1a0"
+                  stroke-width="4"
+                  stroke-linecap="round"
+                />
+                <path d="M139 145h22v30h-22Z" fill="#dfa64b" />
+                <path d="M127 172h46l9 15h-64Z" fill="url(#cup)" />
+                <rect
+                  x="112"
+                  y="185"
+                  width="76"
+                  height="23"
+                  rx="5"
+                  fill="url(#base)"
+                />
+                <rect
+                  x="132"
+                  y="191"
+                  width="36"
+                  height="10"
+                  rx="2"
+                  fill="#eec77d"
+                />
+                <path
+                  d="m150 72 6 12 14 2-10 10 2 14-12-7-12 7 2-14-10-10 14-2Z"
+                  fill="#fff0c9"
+                />
+                <path
+                  d="m55 53 3 8 8 3-8 3-3 8-3-8-8-3 8-3Zm184 77 3 8 8 3-8 3-3 8-3-8-8-3 8-3Z"
+                  fill="#b86243"
+                />
+                <path d="m224 35 2 6 6 2-6 2-2 6-2-6-6-2 6-2Z" fill="#c99c45" />
+                <circle cx="74" cy="149" r="3" fill="#c99c45" />
+                <circle cx="207" cy="166" r="3" fill="#b86243" />
+              </svg>
+            </div>
+            <span class="first-place">AKTUELL AUF PLATZ 1</span>
+            <h2 id="spotlight-title">Vorhang auf …</h2>
+            <p>Für Einsatz, der auffällt.<br />Und einen Unterschied macht.</p>
+            <div class="spotlight-footer">
+              <span class="mini-star">✦</span
+              ><span id="spotlight-state">Dein Team. Euer Ranking.</span>
+            </div>
+          </section>
+
+          <section class="howto" aria-labelledby="howto-title">
+            <span class="note-label">SO EINFACH GEHT’S</span>
+            <h2 id="howto-title">
+              Wertschätzung in<br />drei kleinen Schritten.
+            </h2>
+            <ol>
+              <li>
+                <span>01</span>
+                <div>
+                  <strong>Team ansehen</strong>
+                  <p>Die aktuelle Rangliste lädt automatisch beim Öffnen.</p>
+                </div>
+              </li>
+              <li>
+                <span>02</span>
+                <div>
+                  <strong>Plätze verteilen</strong>
+                  <p>Ziehe die Namen an ihren Platz oder nutze die Pfeile.</p>
+                </div>
+              </li>
+              <li>
+                <span>03</span>
+                <div>
+                  <strong>Applaus festhalten</strong>
+                  <p>Mit „Speichern“ wird eure neue Reihenfolge übernommen.</p>
+                </div>
+              </li>
+            </ol>
+          </section>
+          <p class="sidebar-note">
+            Ein starkes Team bietet jeden Tag<br />gute Gründe, Danke zu sagen.
+          </p>
+        </aside>
+      </div>
+      <footer class="page-footer">
+        <span>Mit Wertschätzung wächst das Wir.</span
+        ><span>GEMEINSAM GLÄNZEN <span aria-hidden="true">✦</span></span>
+      </footer>
+    </main>
+    <dialog
+      class="employee-dialog"
+      id="new-employee-dialog"
+      aria-labelledby="new-employee-title"
+      aria-describedby="new-employee-description"
+    >
+      <form id="new-employee-form">
+        <p class="eyebrow">UNSER TEAM WÄCHST</p>
+        <h2 id="new-employee-title">Mitarbeiter anlegen</h2>
+        <p id="new-employee-description">Wer gehört neu zum Team?</p>
+        <label for="new-employee-name">Vor- und Nachname</label>
+        <input
+          id="new-employee-name"
+          name="name"
+          type="text"
+          placeholder="Max Meier"
+          autocomplete="off"
+          required
+          maxlength="80"
+          aria-describedby="new-employee-error"
+          autofocus
+        />
+        <p class="dialog-note" id="new-employee-note" hidden>
+          Beim Anlegen wird die gespeicherte Rangliste neu geladen. Deine noch
+          ungespeicherte Reihenfolge wird dabei verworfen.
+        </p>
+        <p class="dialog-error" id="new-employee-error" role="alert" hidden></p>
+        <div class="dialog-actions">
+          <button
+            class="button button-secondary"
+            id="new-employee-cancel"
+            type="button"
+          >
+            Abbrechen
+          </button>
+          <button
+            class="button button-primary"
+            id="new-employee-submit"
+            type="submit"
+          >
+            Anlegen
+          </button>
+        </div>
+      </form>
+    </dialog>
+    <div class="toast" id="toast" role="status" hidden></div>
+    <div
+      class="sr-only"
+      id="announcement"
+      role="status"
+      aria-live="polite"
+      aria-atomic="true"
+    ></div>
+    <noscript
+      ><div class="noscript">
+        Bitte aktiviere JavaScript, um die Rangliste zu laden und zu sortieren.
+      </div></noscript
+    >
+  </body>
+</html>
