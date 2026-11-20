@@ -25,6 +25,7 @@ let savedEmployees = [];
 let loaded = false;
 let busy = false;
 let creating = false;
+let deleting = false;
 let drag = null;
 let toastTimer;
 let scrollFrame;
@@ -175,7 +176,14 @@ function renderList() {
     handle.setAttribute("aria-describedby", "sort-help");
     handle.title = "Ziehen oder mit ↑ und ↓ verschieben";
     handle.append(icon("grip"));
-    row.append(rank, avatar, details, actions, handle);
+    const deleteButton = document.createElement("button");
+    deleteButton.type = "button";
+    deleteButton.className = "delete-button";
+    const deleteLabel = `${employee.name} löschen`;
+    deleteButton.setAttribute("aria-label", deleteLabel);
+    deleteButton.title = deleteLabel;
+    deleteButton.append(icon("close"));
+    row.append(rank, avatar, details, actions, handle, deleteButton);
     fragment.append(row);
   });
   list.replaceChildren(fragment);
@@ -192,6 +200,7 @@ function updateView() {
     row.querySelector('[data-direction="down"]').disabled =
       busy || index === employees.length - 1;
     row.querySelector(".drag-handle").disabled = busy;
+    row.querySelector(".delete-button").disabled = busy;
     row.setAttribute("aria-posinset", String(index + 1));
     row.setAttribute("aria-setsize", String(employees.length));
   });
@@ -204,7 +213,7 @@ function updateView() {
   $("new-employee-submit").textContent = creating ? "Wird angelegt …" : "Anlegen";
   newEmployeeForm.setAttribute("aria-busy", String(creating));
   saveButton.querySelector("span").textContent =
-    busy && !creating ? "Wird gespeichert …" : "Speichern";
+    busy && !creating && !deleting ? "Wird gespeichert …" : "Speichern";
   $("ranking-panel").setAttribute("aria-busy", String(busy || !loaded));
   document.querySelector(".save-bar").classList.toggle("dirty", dirty);
   $("status-symbol").replaceChildren(icon(dirty ? "save" : "check"));
@@ -223,12 +232,14 @@ function updateView() {
         : "Ein guter Grund für Applaus.";
     $("save-status").textContent = creating
       ? "Neuer Mitarbeiter wird angelegt"
-      : busy
-        ? "Neue Reihenfolge wird gespeichert"
-        : dirty
-          ? "Ungespeicherte Änderungen"
-          : "Alles auf dem aktuellen Stand";
-    $("save-description").textContent = creating
+      : deleting
+        ? "Mitarbeiter wird gelöscht"
+        : busy
+          ? "Neue Reihenfolge wird gespeichert"
+          : dirty
+            ? "Ungespeicherte Änderungen"
+            : "Alles auf dem aktuellen Stand";
+    $("save-description").textContent = creating || deleting
       ? "Das Team wird aktualisiert."
       : busy
         ? "Die Rangliste wird übernommen."
@@ -301,6 +312,64 @@ function announcePosition(index) {
     `${employees[index].name} ist jetzt auf Platz ${index + 1}. Noch nicht gespeichert.`,
   );
 }
+
+list.addEventListener("click", async (event) => {
+  const button = event.target.closest(".delete-button");
+  if (!button || busy || drag || !loaded) return;
+  const index = Array.from(list.children).indexOf(button.closest(".employee-row"));
+  const { name } = employees[index];
+  if (
+    isDirty() &&
+    !window.confirm(
+      `${name} löschen? Dabei wird die gespeicherte Rangliste neu geladen und deine noch ungespeicherte Reihenfolge verworfen.`,
+    )
+  ) {
+    return;
+  }
+
+  deleting = true;
+  busy = true;
+  $("toast").hidden = true;
+  updateView();
+  let success = false;
+  try {
+    const response = await fetch("/api/delete-mitarbeiter", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name }),
+      signal: AbortSignal.timeout(15000),
+    });
+    employees = await readResponse(response);
+    savedEmployees = structuredClone(employees);
+    renderList();
+    setConnection("Team aktualisiert");
+    toast(`${name} wurde gelöscht.`);
+    announce(
+      `${name} wurde gelöscht. Das Team hat jetzt ${employees.length} Mitarbeiter.`,
+    );
+    success = true;
+  } catch (error) {
+    const message =
+      error.name === "TimeoutError"
+        ? "Die Antwort dauert zu lange. Bitte prüfe die Rangliste vor einem erneuten Versuch."
+        : error instanceof TypeError
+          ? "Keine Verbindung. Bitte prüfe die Rangliste vor einem erneuten Versuch."
+          : error.message;
+    setConnection("Löschen fehlgeschlagen", true);
+    toast(message, true);
+    announce(`Löschen fehlgeschlagen. ${message}`);
+  } finally {
+    deleting = false;
+    busy = false;
+    updateView();
+  }
+  const focusTarget = success
+    ? list.children[Math.min(index, employees.length - 1)]?.querySelector(
+        ".delete-button",
+      ) || newEmployeeButton
+    : button;
+  focusTarget.focus({ preventScroll: true });
+});
 
 list.addEventListener("click", (event) => {
   const button = event.target.closest(".move-button");

@@ -496,7 +496,8 @@ body.is-dragging * {
   gap: 1px;
 }
 .move-button,
-.drag-handle {
+.drag-handle,
+.delete-button {
   border: 0;
   background: transparent;
   display: grid;
@@ -534,6 +535,20 @@ body.is-dragging * {
 .drag-handle .icon {
   width: 19px;
   height: 19px;
+}
+.delete-button {
+  width: 30px;
+  height: 36px;
+  color: #b42318;
+}
+.delete-button .icon {
+  width: 18px;
+  height: 18px;
+  stroke-width: 2;
+}
+.delete-button:not(:disabled):hover {
+  color: #8b1c13;
+  background: #fce8e6;
 }
 .save-bar {
   border-top: 1px solid var(--line);
