@@ -19,7 +19,7 @@ PORT=8081 ./mvnw spring-boot:run
 
 ## Bedienung
 
-- Die zehn Mitarbeiter werden beim Öffnen über `GET /api/mitarbeiter` aus H2 geladen.
+- Die Mitarbeiterliste wird beim Öffnen über `GET /api/mitarbeiter` aus H2 geladen. Die Anzahl der angezeigten Mitarbeiter richtet sich nach der API-Antwort.
 - Am Griff rechts eine Person mit Maus oder Touch an ihren neuen Platz ziehen. Am Bildschirmrand scrollt die Seite während des Ziehens automatisch.
 - Alternativ die Pfeil-Schaltflächen verwenden. Mit der Tabulatortaste den Griff fokussieren und mit **↑ / ↓** verschieben; **Pos1 / Ende** verschiebt an den Anfang bzw. das Ende. **Escape** bricht einen laufenden Ziehvorgang ab.
 - Der erste Platz wird rechts hervorgehoben. Änderungen erscheinen zunächst als Vorschau.
@@ -28,21 +28,16 @@ PORT=8081 ./mvnw spring-boot:run
 
 ## API
 
-GET und POST verwenden dasselbe Format, ohne interne Datenbank-IDs. **Ranking 0 entspricht Platz 1**, Ranking 9 entspricht Platz 10. GET und die POST-Antwort sind nach Ranking aufsteigend sortiert.
+GET und POST verwenden dasselbe Format, ohne interne Datenbank-IDs. **Ranking 0 entspricht Platz 1**; für eine Liste mit `n` Mitarbeitern reichen die Rankings von `0` bis `n - 1`. GET und die POST-Antwort sind nach Ranking aufsteigend sortiert.
+
+Beispiel mit einer beliebigen Teamgröße:
 
 ```json
 {
   "mitarbeiter": [
     { "name": "Franz Huber", "ranking": 0 },
     { "name": "Anna Berger", "ranking": 1 },
-    { "name": "Lukas Steiner", "ranking": 2 },
-    { "name": "Sophie Wagner", "ranking": 3 },
-    { "name": "Thomas Gruber", "ranking": 4 },
-    { "name": "Julia Hofer", "ranking": 5 },
-    { "name": "Michael Bauer", "ranking": 6 },
-    { "name": "Sarah Leitner", "ranking": 7 },
-    { "name": "David Fischer", "ranking": 8 },
-    { "name": "Elena Mayer", "ranking": 9 }
+    { "name": "Lukas Steiner", "ranking": 2 }
   ]
 }
 ```
@@ -56,17 +51,17 @@ curl -X POST http://localhost:8080/api/save-mitarbeiter \
   --data-binary @rangliste.json
 ```
 
-POST ersetzt die vollständige Liste atomar in einer Transaktion. Es müssen genau zehn Einträge mit eindeutigen, nicht leeren Namen (maximal 80 Zeichen) und den eindeutigen ganzzahligen Rankings 0–9 vorliegen. Ungültige Anfragen liefern HTTP 400 und verändern die gespeicherten Daten nicht.
+POST ersetzt die vollständige Liste atomar in einer Transaktion. Für dynamische Ranglisten benötigt jeder Eintrag einen eindeutigen, nicht leeren Namen (maximal 80 Zeichen) und ein eindeutiges ganzzahliges Ranking. Die Rankings müssen lückenlos von `0` bis `n - 1` reichen. Eine leere Liste wird als `{"mitarbeiter":[]}` dargestellt. Ungültige Anfragen liefern HTTP 400 und verändern die gespeicherten Daten nicht.
 
 ### Mitarbeiter anlegen (Frontend)
 
 Über **Mitarbeiter anlegen** öffnet sich ein Dialog zur Namenseingabe. Er sendet `POST /api/new-mitarbeiter` mit beispielsweise `{"name":"Max Meier"}` und erwartet als Antwort die vollständige aktualisierte Liste im oben gezeigten Format. Diese Antwort wird als gespeicherter Stand übernommen. Bei einer ungespeicherten Reihenfolge weist der Dialog darauf hin, dass sie dabei ersetzt wird. Fehler bleiben im Dialog sichtbar; Name und bisherige Rangliste bleiben erhalten.
 
-Das Frontend unterstützt beliebig viele Mitarbeiter, einschließlich einer leeren Liste; Rankings laufen von 0 bis zur Mitarbeiteranzahl minus 1. **Der neue Endpunkt und die Anpassung der bisherigen Zehnergrenze im Backend sind noch nicht implementiert.**
+Das Frontend unterstützt eine dynamische Mitarbeiterzahl einschließlich einer leeren Liste. **Der neue Endpunkt und die Backend-Validierung für dynamische Ranglisten sind noch umzusetzen.**
 
 ## Datenbank und Aufbau
 
-Die H2-Datei liegt unter `data/mitarbeiter.mv.db`, relativ zum Arbeitsverzeichnis beim Start. Beim ersten Start werden die zehn Beispiele angelegt. Eine vorhandene Rangliste wird bei einem Neustart beibehalten. Für einen frischen Beispielstand die Anwendung stoppen und das Verzeichnis `data/` löschen.
+Die H2-Datei liegt unter `data/mitarbeiter.mv.db`, relativ zum Arbeitsverzeichnis beim Start. Beim ersten Start werden Beispieldaten angelegt. Diese legen keine feste Teamgröße für das Frontend fest. Eine vorhandene Rangliste wird bei einem Neustart beibehalten. Für einen frischen Beispielstand die Anwendung stoppen und das Verzeichnis `data/` löschen.
 
 ```text
 src/main/java/at/bbrz/mitarbeiter/
