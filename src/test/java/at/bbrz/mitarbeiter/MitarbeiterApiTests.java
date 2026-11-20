@@ -16,6 +16,7 @@ import at.bbrz.mitarbeiter.service.MitarbeiterService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -199,10 +200,14 @@ class MitarbeiterApiTests {
     }
 
     @Test
-    void validatesMaximumNameLengthForBothEndpoints() throws Exception {
+    void validatesMaximumNameLengthForAllEndpoints() throws Exception {
         String tooLong = "A".repeat(81);
         MitarbeiterResponse before = service.getMitarbeiter();
         mvc.perform(post("/api/new-mitarbeiter").contentType(MediaType.APPLICATION_JSON)
+                        .content(json.writeValueAsString(Collections.singletonMap("name", tooLong))))
+                .andExpect(status().isBadRequest());
+        assertThat(service.getMitarbeiter()).isEqualTo(before);
+        mvc.perform(post("/api/delete-mitarbeiter").contentType(MediaType.APPLICATION_JSON)
                         .content(json.writeValueAsString(Collections.singletonMap("name", tooLong))))
                 .andExpect(status().isBadRequest());
         assertThat(service.getMitarbeiter()).isEqualTo(before);
@@ -215,6 +220,73 @@ class MitarbeiterApiTests {
                         .content(json.writeValueAsString(Collections.singletonMap("name", longestName))))
                 .andExpect(status().isOk());
         assertThat(repository.findAllByOrderByRankingAsc().getLast().getName()).isEqualTo(longestName);
+        mvc.perform(post("/api/delete-mitarbeiter").contentType(MediaType.APPLICATION_JSON)
+                        .content(json.writeValueAsString(Collections.singletonMap("name", longestName))))
+                .andExpect(status().isOk());
+        assertThat(service.getMitarbeiter()).isEqualTo(before);
+    }
+
+    @ParameterizedTest
+    @CsvSource({"1, 0", "5, 0", "5, 2", "5, 4", "12, 6"})
+    void deletesEmployeeAndClosesRankingGapWithoutChangingRemainingIds(int count, int removedIndex) throws Exception {
+        service.saveMitarbeiter(new MitarbeiterResponse(sampleEntries(count)));
+        List<MitarbeiterEntity> before = repository.findAllByOrderByRankingAsc();
+        MitarbeiterEntity removed = before.get(removedIndex);
+        List<MitarbeiterEntity> remaining = new ArrayList<>(before);
+        remaining.remove(removedIndex);
+        List<MitarbeiterEntry> expected = IntStream.range(0, remaining.size())
+                .mapToObj(index -> new MitarbeiterEntry(remaining.get(index).getName(), index)).toList();
+        String expectedJson = json.writeValueAsString(new MitarbeiterResponse(expected));
+
+        mvc.perform(post("/api/delete-mitarbeiter")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json.writeValueAsString(Collections.singletonMap("name",
+                                "  " + removed.getName().toUpperCase(java.util.Locale.ROOT) + "  "))))
+                .andExpect(status().isOk()).andExpect(content().json(expectedJson));
+        mvc.perform(get("/api/mitarbeiter"))
+                .andExpect(status().isOk()).andExpect(content().json(expectedJson));
+        assertThat(repository.existsById(removed.getId())).isFalse();
+        List<MitarbeiterEntity> stored = repository.findAllByOrderByRankingAsc();
+        assertThat(stored).extracting(MitarbeiterEntity::getId)
+                .containsExactlyElementsOf(remaining.stream().map(MitarbeiterEntity::getId).toList());
+        assertThat(stored).extracting(MitarbeiterEntity::getRanking)
+                .containsExactlyElementsOf(IntStream.range(0, remaining.size()).boxed().toList());
+        // Nach dem Löschen des letzten Mitarbeiters dürfen auch keine Beispiele zurückkehren.
+        runSchema();
+        service.initializeExamples();
+        assertThat(service.getMitarbeiter()).isEqualTo(new MitarbeiterResponse(expected));
+
+        List<MitarbeiterEntry> afterAppend = new ArrayList<>(expected);
+        afterAppend.add(new MitarbeiterEntry("Nachfolger", expected.size()));
+        mvc.perform(post("/api/new-mitarbeiter").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\":\"Nachfolger\"}"))
+                .andExpect(status().isOk())
+                .andExpect(content().json(json.writeValueAsString(new MitarbeiterResponse(afterAppend))));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {
+            "null", "{}", "{kaputt", "[]", "{\"name\":null}",
+            "{\"name\":\"\"}", "{\"name\":\"   \"}"
+    })
+    void rejectsInvalidDeleteRequestsWithoutChangingDatabase(String body) throws Exception {
+        MitarbeiterResponse before = service.getMitarbeiter();
+        mvc.perform(post("/api/delete-mitarbeiter").contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.detail").isNotEmpty());
+        assertThat(service.getMitarbeiter()).isEqualTo(before);
+    }
+
+    @ParameterizedTest
+    @ValueSource(ints = {0, 3})
+    void rejectsUnknownEmployeeWithoutChangingDatabase(int count) throws Exception {
+        service.saveMitarbeiter(new MitarbeiterResponse(sampleEntries(count)));
+        MitarbeiterResponse before = service.getMitarbeiter();
+        mvc.perform(post("/api/delete-mitarbeiter").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\":\"Unbekannt\"}"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.detail").value("Dieser Mitarbeiter wurde nicht gefunden."));
+        assertThat(service.getMitarbeiter()).isEqualTo(before);
     }
 
     @Test
@@ -273,8 +345,8 @@ class MitarbeiterApiTests {
         CountDownLatch ready = new CountDownLatch(2);
         CountDownLatch start = new CountDownLatch(1);
         try (var executor = Executors.newFixedThreadPool(2)) {
-            var first = executor.submit(() -> createAfterSignal("Max Meier", ready, start));
-            var second = executor.submit(() -> createAfterSignal("Anna Neu", ready, start));
+            var first = executor.submit(() -> postAfterSignal("/api/new-mitarbeiter", "Max Meier", ready, start));
+            var second = executor.submit(() -> postAfterSignal("/api/new-mitarbeiter", "Anna Neu", ready, start));
             try {
                 assertThat(ready.await(5, TimeUnit.SECONDS)).isTrue();
             } finally {
@@ -289,12 +361,34 @@ class MitarbeiterApiTests {
         assertThat(stored).extracting(MitarbeiterEntity::getRanking).containsExactly(0, 1);
     }
 
-    private int createAfterSignal(String name, CountDownLatch ready, CountDownLatch start) throws Exception {
+    @Test
+    void concurrentDeletesKeepOrderAndContiguousRankings() throws Exception {
+        service.saveMitarbeiter(new MitarbeiterResponse(sampleEntries(5)));
+        CountDownLatch ready = new CountDownLatch(2);
+        CountDownLatch start = new CountDownLatch(1);
+        try (var executor = Executors.newFixedThreadPool(2)) {
+            var first = executor.submit(() -> postAfterSignal("/api/delete-mitarbeiter", "Person 2", ready, start));
+            var second = executor.submit(() -> postAfterSignal("/api/delete-mitarbeiter", "Person 4", ready, start));
+            try {
+                assertThat(ready.await(5, TimeUnit.SECONDS)).isTrue();
+            } finally {
+                start.countDown();
+            }
+            assertThat(first.get(10, TimeUnit.SECONDS)).isEqualTo(200);
+            assertThat(second.get(10, TimeUnit.SECONDS)).isEqualTo(200);
+        }
+        assertThat(service.getMitarbeiter()).isEqualTo(new MitarbeiterResponse(List.of(
+                new MitarbeiterEntry("Person 1", 0),
+                new MitarbeiterEntry("Person 3", 1),
+                new MitarbeiterEntry("Person 5", 2))));
+    }
+
+    private int postAfterSignal(String endpoint, String name, CountDownLatch ready, CountDownLatch start) throws Exception {
         ready.countDown();
         if (!start.await(5, TimeUnit.SECONDS)) {
             throw new IllegalStateException("Startsignal für die parallele Anfrage fehlt.");
         }
-        return mvc.perform(post("/api/new-mitarbeiter").contentType(MediaType.APPLICATION_JSON)
+        return mvc.perform(post(endpoint).contentType(MediaType.APPLICATION_JSON)
                         .content(json.writeValueAsString(Collections.singletonMap("name", name))))
                 .andReturn().getResponse().getStatus();
     }

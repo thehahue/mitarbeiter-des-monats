@@ -159,6 +159,37 @@ with sync_playwright() as p:
     expect(page.locator('.employee-row')).to_have_count(len(baseline) + 1)
     page.locator('#new-employee-cancel').click()
     print('PASS: create via popup, exact payload, persistence after reload, duplicate rejected')
+
+    before_delete = page.locator('.employee-name').all_text_contents()
+    page.route('**/api/delete-mitarbeiter', lambda route: route.abort())
+    page.locator('.delete-button').first.click()
+    expect(page.locator('#toast')).to_have_class('toast error')
+    expect(page.locator('.delete-button').first).to_be_enabled()
+    assert page.locator('.employee-name').all_text_contents() == before_delete
+    page.unroute('**/api/delete-mitarbeiter')
+    with page.expect_response('**/api/delete-mitarbeiter') as deleted:
+        with page.expect_request('**/api/delete-mitarbeiter') as sent:
+            page.locator('.delete-button').first.click()
+    assert sent.value.method == 'POST'
+    assert sent.value.post_data_json == {'name': before_delete[0]}
+    assert deleted.value.status == 200
+    expected_names = before_delete[1:]
+    expected_team = [{'name': name, 'ranking': index} for index, name in enumerate(expected_names)]
+    assert deleted.value.json() == {'mitarbeiter': expected_team}
+    expect(page.locator('#employee-count')).to_have_text(str(len(expected_names)))
+    expect(page.locator('#new-employee-button')).to_be_enabled()
+    expect(page.locator('#save-button')).to_be_disabled()
+    assert page.locator('.employee-name').all_text_contents() == expected_names
+    if expected_names:
+        expect(page.locator('#spotlight-title')).to_have_text(expected_names[0])
+        expect(page.locator('.delete-button').first).to_be_focused()
+    else:
+        expect(page.locator('#empty-state')).to_be_visible()
+        expect(page.locator('#new-employee-button')).to_be_focused()
+    page.reload()
+    expect(page.locator('#employee-count')).to_have_text(str(len(expected_names)))
+    assert page.locator('.employee-name').all_text_contents() == expected_names
+    print('PASS: delete via button, error recovery, exact payload, reranking and reload')
     assert not errors, errors
     print('PASS: no JavaScript errors')
     browser.close()

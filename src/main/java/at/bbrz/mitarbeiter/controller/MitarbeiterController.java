@@ -1,5 +1,6 @@
 package at.bbrz.mitarbeiter.controller;
 
+import at.bbrz.mitarbeiter.model.DeleteMitarbeiterRequest;
 import at.bbrz.mitarbeiter.model.MitarbeiterResponse;
 import at.bbrz.mitarbeiter.model.NewMitarbeiterRequest;
 import at.bbrz.mitarbeiter.service.MitarbeiterService;
@@ -32,5 +33,10 @@ public class MitarbeiterController {
     @PostMapping("/new-mitarbeiter")
     public MitarbeiterResponse newMitarbeiter(@Valid @RequestBody NewMitarbeiterRequest request) {
         return service.newMitarbeiter(request);
+    }
+
+    @PostMapping("/delete-mitarbeiter")
+    public MitarbeiterResponse deleteMitarbeiter(@Valid @RequestBody DeleteMitarbeiterRequest request) {
+        return service.deleteMitarbeiter(request);
     }
 }

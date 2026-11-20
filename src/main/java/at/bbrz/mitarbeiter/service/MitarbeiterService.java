@@ -8,6 +8,7 @@ import java.util.Set;
 import java.util.stream.IntStream;
 
 import at.bbrz.mitarbeiter.repo.entity.MitarbeiterEntity;
+import at.bbrz.mitarbeiter.model.DeleteMitarbeiterRequest;
 import at.bbrz.mitarbeiter.model.MitarbeiterEntry;
 import at.bbrz.mitarbeiter.model.MitarbeiterResponse;
 import at.bbrz.mitarbeiter.model.NewMitarbeiterRequest;
@@ -72,6 +73,28 @@ public class MitarbeiterService {
                     "Dieser Mitarbeiter existiert bereits.");
         }
         repository.save(new MitarbeiterEntity(null, name, entries.size()));
+        return getMitarbeiter();
+    }
+
+    @Transactional
+    public MitarbeiterResponse deleteMitarbeiter(DeleteMitarbeiterRequest request) {
+        lockRanking();
+        String normalizedName = request.name().strip().toLowerCase(Locale.ROOT);
+        List<MitarbeiterEntity> entries = repository.findAllByOrderByRankingAsc();
+        int removedIndex = IntStream.range(0, entries.size())
+                .filter(index -> entries.get(index).getName().toLowerCase(Locale.ROOT).equals(normalizedName))
+                .findFirst()
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
+                        "Dieser Mitarbeiter wurde nicht gefunden."));
+
+        repository.deleteById(entries.get(removedIndex).getId());
+        // Aufsteigend nachrücken: Der jeweils nächste Zielplatz ist bereits frei.
+        // So bleiben Rankings auch während der Updates eindeutig und IDs erhalten.
+        for (int index = removedIndex + 1; index < entries.size(); index++) {
+            MitarbeiterEntity entry = entries.get(index);
+            entry.setRanking(index - 1);
+            repository.save(entry);
+        }
         return getMitarbeiter();
     }
 

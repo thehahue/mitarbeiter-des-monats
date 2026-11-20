@@ -21,6 +21,7 @@ PORT=8081 ./mvnw spring-boot:run
 
 - Die Mitarbeiterliste wird beim Öffnen über `GET /api/mitarbeiter` aus H2 geladen. Die Anzahl der angezeigten Mitarbeiter richtet sich nach der API-Antwort.
 - **Mitarbeiter anlegen** öffnet die Namenseingabe. Neue Mitarbeiter werden gespeichert und am Ende der Rangliste angefügt.
+- Das rote **×** rechts an einer Person löscht sie sofort. Die nachfolgenden Mitarbeiter rücken auf. Bei einer ungespeicherten Reihenfolge wird vor dem Verwerfen nachgefragt.
 - Am Griff rechts eine Person mit Maus oder Touch an ihren neuen Platz ziehen. Am Bildschirmrand scrollt die Seite während des Ziehens automatisch.
 - Alternativ die Pfeil-Schaltflächen verwenden. Mit der Tabulatortaste den Griff fokussieren und mit **↑ / ↓** verschieben; **Pos1 / Ende** verschiebt an den Anfang bzw. das Ende. **Escape** bricht einen laufenden Ziehvorgang ab.
 - Der erste Platz wird rechts hervorgehoben. Änderungen erscheinen zunächst als Vorschau.
@@ -64,6 +65,16 @@ curl -X POST 'http://localhost:8080/api/new-mitarbeiter' -H 'Content-Type: appli
 
 Der Frontend-Dialog **Mitarbeiter anlegen** verwendet diesen Endpunkt und übernimmt die Antwort als gespeicherten Stand. Bei einer ungespeicherten Reihenfolge weist der Dialog darauf hin, dass sie dabei ersetzt wird. Fehler bleiben im Dialog sichtbar; Name und bisherige Rangliste bleiben erhalten. Frontend und Backend unterstützen eine dynamische Mitarbeiterzahl einschließlich einer leeren Liste.
 
+### Mitarbeiter löschen
+
+`POST /api/delete-mitarbeiter` nimmt `{"name":"Max Meier"}` entgegen und löscht die passende Person. Äußere Leerzeichen und Groß-/Kleinschreibung werden beim Namensvergleich ignoriert. Die übrigen Mitarbeiter behalten ihre Reihenfolge; nachfolgende Rankings werden um eins verringert, sodass sie wieder lückenlos von `0` bis `n - 1` reichen. Löschen und Nachrücken erfolgen gemeinsam in einer Transaktion.
+
+```bash
+curl -X POST 'http://localhost:8080/api/delete-mitarbeiter' -H 'Content-Type: application/json' -d '{"name":"Max Meier"}'
+```
+
+Die Antwort mit HTTP 200 enthält die vollständige aktualisierte Liste. Beim Löschen der letzten Person lautet sie `{"mitarbeiter":[]}`. Ein unbekannter Name liefert HTTP 404; ein fehlender, leerer oder zu langer Name liefert HTTP 400. Fehler verändern die gespeicherte Rangliste nicht. Der Löschbutton im Frontend übernimmt die Antwort unmittelbar als gespeicherten Stand.
+
 ## Datenbank und Aufbau
 
 Die H2-Konsole ist unter **http://localhost:8080/h2-console** erreichbar (bei anderem Server-Port entsprechend anpassen). Zum Anmelden die JDBC-URL `jdbc:h2:file:./data/mitarbeiter`, den Benutzernamen `sa` und ein leeres Passwort verwenden.
@@ -93,7 +104,7 @@ Die Oberfläche verwendet Google Fonts mit lokalen Systemschriften als Fallback.
 java -jar target/mitarbeiter-des-monats-0.0.1-SNAPSHOT.jar
 ```
 
-Die API-Integrationstests verwenden eine getrennte H2-In-Memory-Datenbank und prüfen unterschiedliche Teamgrößen einschließlich leerer Listen, Sortierung, Anlegen und erneutes Laden, Namens- und Rankingvalidierung, parallele Neuanlagen sowie die unveränderte Datenbank bei ungültigen Anfragen.
+Die API-Integrationstests verwenden eine getrennte H2-In-Memory-Datenbank und prüfen unterschiedliche Teamgrößen einschließlich leerer Listen, Sortierung, Anlegen, Löschen mit Nachrücken und erneutes Laden, Namens- und Rankingvalidierung, parallele Schreibzugriffe sowie die unveränderte Datenbank bei ungültigen Anfragen.
 
 ## Browser-Test
 
@@ -105,7 +116,7 @@ python3 scripts/frontend-check.py --chromium-executable /usr/bin/chromium
 
 Der Test benötigt Playwright (Installation siehe unten) und prüft unterschiedliche Teamgrößen, Anlegen, Fehlerfälle, Tastaturbedienung und mobile Ansichten. Ohne `--chromium-executable` verwendet er den von Playwright installierten Browser.
 
-Das dauerhafte Testskript liegt unter `scripts/browser-check.py` und bleibt bei `./mvnw clean` erhalten. Es prüft Laden, Tastaturbedienung, Drag-and-drop mit Maus und Touch, Speichern, Anlegen über das Popup einschließlich Duplikatprüfung, Fehlerbehandlung und responsive Ansichten. Es testet die vom Server ausgelieferten Dateien und verändert die Rangliste der Testinstanz.
+Das dauerhafte Testskript liegt unter `scripts/browser-check.py` und bleibt bei `./mvnw clean` erhalten. Es prüft Laden, Tastaturbedienung, Drag-and-drop mit Maus und Touch, Speichern, Anlegen über das Popup einschließlich Duplikatprüfung, Löschen über den Zeilenbutton mit Nachrücken, Fehlerbehandlung und responsive Ansichten. Es testet die vom Server ausgelieferten Dateien und verändert die Rangliste der Testinstanz.
 
 Einmalig Playwright und Chromium in einer Python-Umgebung installieren:
 
